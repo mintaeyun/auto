@@ -1,0 +1,24 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>mods-기획안내훅</title><style>
+:root{--bg:#fff;--fg:#1d2430;--mut:#667085;--line:#d9dee7;--acc:#1f6f78;--code:#f3f5f8;--bad:#b42318;--hl:#fff3bf}
+@media(prefers-color-scheme:dark){:root{--bg:#14181f;--fg:#e4e8ef;--mut:#9aa5b5;--line:#2c3441;--acc:#6cc4cc;--code:#1e2530;--bad:#ff8a80;--hl:#4a4320}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.65 'Malgun Gothic','Noto Sans KR',sans-serif}
+nav{position:sticky;top:0;z-index:5;display:flex;gap:16px;flex-wrap:wrap;padding:10px 20px;background:var(--bg);border-bottom:1px solid var(--line)}
+nav a{font-weight:700}main{max-width:1100px;margin:0 auto;padding:24px 20px 80px}
+a{color:var(--acc)}a.ref{text-decoration:none;border-bottom:1px dotted var(--acc)}code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.92em}
+pre{background:var(--code);padding:14px;border-radius:8px;overflow:auto}pre code{background:none;padding:0}
+.tw{overflow:auto}table{border-collapse:collapse;margin:12px 0;width:100%}th,td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}th{background:var(--code)}
+.broken{color:var(--bad);text-decoration:underline wavy}.bl{font-weight:400;font-size:.85em;color:var(--mut);margin:2px 0}.bl summary{cursor:pointer}
+:target{background:var(--hl)}.mermaid{background:transparent;text-align:center}.warn{color:var(--bad)}small{color:var(--mut)}
+.toc{columns:2;font-size:.9em}.empty{color:var(--bad);font-weight:700}
+</style></head><body><nav><a href="index.html">문서 목록</a><a href="추적표.html">추적표</a><a href="코드색인.html">코드 색인</a></nav><main><ul class="toc"><li><a href="#h1">Mods 기획: 기획 안내 훅</a></li><li><a href="#h2">Context</a></li><li><a href="#h3">결정 사항</a></li><li><a href="#h4">구현 계획</a></li><li><a href="#h5">검증</a></li><li><a href="#h6">참고</a></li></ul><h1 id="h1">Mods 기획: 기획 안내 훅</h1>
+<h2 id="h2">Context</h2>
+<p>업무자동화 프로젝트(<code>D:\chaai\07_auto</code>)의 작업 규칙(&quot;큰 기능은 플랜모드로 시작&quot;)을 <code>memory.md</code>에 의존하지 않고 Mods로 자동 적용한다. 1단계로 기획 안내 훅 하나만 만든다.</p>
+<h2 id="h3">결정 사항</h2>
+<ul><li>적용 범위: 이 프로젝트 한정 (작업 폴더가 <code>D:\chaai\07_auto</code>일 때만 동작)</li><li>1단계 모드: <b>기획 안내 훅</b> (<code>prompt.submit</code>)</li><li>보류: 기획 폴더 가드, <code>/기획</code> 명령어, 위험 명령 차단 (필요 시 2단계)</li></ul>
+<h2 id="h4">구현 계획</h2>
+<p>위치: <code>C:\Users\alsxo\.claude\dev-mods\&lt;세션ID&gt;/plan-guide/</code></p>
+<ol><li><code>.claude-plugin/plugin.json</code>: name <code>plan-guide</code>, version <code>0.1.0</code></li><li><code>hooks/hooks.json</code>: <code>{ &quot;modules&quot;: [&quot;./register.ts&quot;] }</code></li><li><code>hooks/register.ts</code>: <code>on(&#x27;prompt.submit&#x27;, ...)</code> 훅</li><li>현재 작업 폴더가 <code>D:\chaai\07_auto</code>가 아니면 <code>next(e)</code>로 통과</li><li>프롬프트에 큰 기능 키워드(구현, 추가, 만들, 기능 등)가 있고 플랜모드가 아니면 <code>$.ui.toast</code>로 &quot;플랜모드로 시작하세요(Shift+Tab). 기획은 <code>기획\</code> 폴더에 md로 저장됩니다&quot; 안내</li><li>프롬프트 자체는 바꾸지 않고 <code>next(e)</code>로 그대로 전달</li><li><code>hooks/register.test.ts</code>: 키워드 감지와 폴더 조건 테스트</li></ol>
+<h2 id="h5">검증</h2>
+<ul><li><code>claude plugin validate &lt;mod 폴더&gt;</code></li><li><code>claude plugin test &lt;mod 폴더&gt;</code></li><li>핫 리로드 허용 후, 이 프로젝트에서 &quot;기능 구현해줘&quot; 입력 시 안내가 뜨고 다른 폴더에서는 뜨지 않는지 확인</li></ul>
+<h2 id="h6">참고</h2>
+<ul><li>프로젝트 규칙상 기획 문서는 <code>D:\chaai\07_auto\기획\</code>에 저장해야 한다. 플랜모드 중에는 이 계획 파일만 쓸 수 있으므로, 승인 후 이 내용을 <code>기획\mods-기획안내훅.md</code>로 복사한다.</li><li>키워드 감지는 오탐 가능성이 있어 안내만 하고 차단하지 않는다.</li></ul></main></body></html>

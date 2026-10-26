@@ -1,0 +1,20 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>세금계산서-계약서-비교</title><style>
+:root{--bg:#fff;--fg:#1d2430;--mut:#667085;--line:#d9dee7;--acc:#1f6f78;--code:#f3f5f8;--bad:#b42318;--hl:#fff3bf}
+@media(prefers-color-scheme:dark){:root{--bg:#14181f;--fg:#e4e8ef;--mut:#9aa5b5;--line:#2c3441;--acc:#6cc4cc;--code:#1e2530;--bad:#ff8a80;--hl:#4a4320}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.65 'Malgun Gothic','Noto Sans KR',sans-serif}
+nav{position:sticky;top:0;z-index:5;display:flex;gap:16px;flex-wrap:wrap;padding:10px 20px;background:var(--bg);border-bottom:1px solid var(--line)}
+nav a{font-weight:700}main{max-width:1100px;margin:0 auto;padding:24px 20px 80px}
+a{color:var(--acc)}a.ref{text-decoration:none;border-bottom:1px dotted var(--acc)}code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.92em}
+pre{background:var(--code);padding:14px;border-radius:8px;overflow:auto}pre code{background:none;padding:0}
+.tw{overflow:auto}table{border-collapse:collapse;margin:12px 0;width:100%}th,td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}th{background:var(--code)}
+.broken{color:var(--bad);text-decoration:underline wavy}.bl{font-weight:400;font-size:.85em;color:var(--mut);margin:2px 0}.bl summary{cursor:pointer}
+:target{background:var(--hl)}.mermaid{background:transparent;text-align:center}.warn{color:var(--bad)}small{color:var(--mut)}
+.toc{columns:2;font-size:.9em}.empty{color:var(--bad);font-weight:700}
+</style></head><body><nav><a href="index.html">문서 목록</a><a href="추적표.html">추적표</a><a href="코드색인.html">코드 색인</a></nav><main><h1 id="h1">로컬 웹 UI PDF 비교 프로그램 구축 계획</h1>
+<ul><li>Windows EXE 실행 → 로컬 Python 서버 시작 → 기본 브라우저 웹 UI 열기.</li><li>서버는 127.0.0.1:18765에서만 실행. 정적 UI/CSS/JS를 EXE에 포함하고 외부 CDN 미사용.</li><li>외부 AI API 없이 규칙 기반 PDF 텍스트 추출과 금액 비교.</li><li>새봄 그룹웨어 공개 JSON에서 메일과 계약 목록을 조회하고 실제 PDF를 다운로드.</li><li>확장 케이스 선택, 최신순 메일, 단일 선택/전체 처리, 원본 열기, CSV/JSON 보고서.</li><li>PDF 공급자 사업자번호로 지출 계약을 연결. 후보가 여러 개면 자동 확정하지 않음.</li><li>PDF 공급가액/세액/합계, 계약금액의 부가세 포함 여부, 계약기간, 분할 지급 조항을 대조.</li><li>메일 청구금액과 PDF 합계를 별도로 비교. 추출 실패/불확실성은 확인 필요.</li><li>브라우저 확장 불필요. 현재 공개 사이트 전용 어댑터이며 인증 사이트는 별도 구현 필요.</li><li>스캔 PDF OCR과 실제 결재 상신은 첫 버전 범위 밖.</li></ul>
+<h2 id="h2">사용자 흐름</h2>
+<ol><li>EXE 실행 시 저장된 목록을 표시. 인터넷을 자동으로 사용하지 않음.</li><li>인터넷 연결 시 &#x27;최신 목록 가져오기&#x27;로 메일/계약 목록을 로컬에 저장. 마지막 조회 시각을 표시.</li><li>제목/보낸 사람 검색 및 체크박스로 여러 메일 선택.</li><li>&#x27;선택 자료 저장&#x27;으로 선택한 메일 PDF 및 지출 계약 PDF를 갱신. 실패 파일을 개별 표시.</li><li>&#x27;선택 메일 로컬 비교&#x27;는 네트워크 호출 없이 저장한 원본만 분석. 없는 자료는 확인 필요.</li><li>상세 결과에 항목별 판정과 근거를 표시하고 원본 두 PDF를 나란히 제공. CSV 보고서 저장.</li><li>사이트를 사용할 수 없어도 로컬 PDF 두 개 직접 선택 후 비교 가능.</li><li>&#x27;프로그램 종료&#x27; 버튼으로 서버 종료. 브라우저 탭만 닫으면 서버는 유지.</li></ol>
+<h2 id="h3">저장과 배포</h2>
+<ul><li>배포 파일: dist/SaebomCompare.exe. Python과 pypdf, 웹 UI를 모두 포함.</li><li>EXE 사용자 데이터: %LOCALAPPDATA%/SaebomCompare. 실행 파일 교체 시 자료 유지.</li><li>다운로드/추출 텍스트: downloads. 목록 캐시: downloads/catalog_*.json.</li><li>결과 이력/CSV/JSON: reports. 실행 로그: app.log.</li><li>현재 로그인 없는 공개 사이트 전용 어댑터. 브라우저 연동과 인증 기능은 별도 확장.</li></ul>
+<h2 id="h4">검증 기준</h2>
+<ul><li>공급가액/부가세, 부가세 포함 계약, 분할 지급, 기간 만료, 스캔 PDF, 메일/PDF 금액 차이 테스트.</li><li>네트워크 호출을 차단한 상태에서 저장 목록/저장 PDF 비교 성공 확인.</li><li>자료 누락은 일치로 표시하지 않고 확인 필요로 표시.</li><li>HTTP API의 목록/선택 저장/선택 비교/로컬 파일 비교/원본 제공/종료 확인.</li><li>패키징된 EXE 실행 후 UI 응답과 오프라인 비교 검증.</li></ul></main></body></html>

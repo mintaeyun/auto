@@ -1,0 +1,24 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>mods-세션정보밴드</title><style>
+:root{--bg:#fff;--fg:#1d2430;--mut:#667085;--line:#d9dee7;--acc:#1f6f78;--code:#f3f5f8;--bad:#b42318;--hl:#fff3bf}
+@media(prefers-color-scheme:dark){:root{--bg:#14181f;--fg:#e4e8ef;--mut:#9aa5b5;--line:#2c3441;--acc:#6cc4cc;--code:#1e2530;--bad:#ff8a80;--hl:#4a4320}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.65 'Malgun Gothic','Noto Sans KR',sans-serif}
+nav{position:sticky;top:0;z-index:5;display:flex;gap:16px;flex-wrap:wrap;padding:10px 20px;background:var(--bg);border-bottom:1px solid var(--line)}
+nav a{font-weight:700}main{max-width:1100px;margin:0 auto;padding:24px 20px 80px}
+a{color:var(--acc)}a.ref{text-decoration:none;border-bottom:1px dotted var(--acc)}code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.92em}
+pre{background:var(--code);padding:14px;border-radius:8px;overflow:auto}pre code{background:none;padding:0}
+.tw{overflow:auto}table{border-collapse:collapse;margin:12px 0;width:100%}th,td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}th{background:var(--code)}
+.broken{color:var(--bad);text-decoration:underline wavy}.bl{font-weight:400;font-size:.85em;color:var(--mut);margin:2px 0}.bl summary{cursor:pointer}
+:target{background:var(--hl)}.mermaid{background:transparent;text-align:center}.warn{color:var(--bad)}small{color:var(--mut)}
+.toc{columns:2;font-size:.9em}.empty{color:var(--bad);font-weight:700}
+</style></head><body><nav><a href="index.html">문서 목록</a><a href="추적표.html">추적표</a><a href="코드색인.html">코드 색인</a></nav><main><ul class="toc"><li><a href="#h1">Mods 기획: 세션 정보 밴드 (최소 기능)</a></li><li><a href="#h2">Context</a></li><li><a href="#h3">표시할 정보 (최소)</a></li><li><a href="#h4">구현 계획</a></li><li><a href="#h5">검증</a></li><li><a href="#h6">참고</a></li></ul><h1 id="h1">Mods 기획: 세션 정보 밴드 (최소 기능)</h1>
+<h2 id="h2">Context</h2>
+<p>사용자가 플랜모드 없이 최소 기능으로 바로 시작하길 원함. 프롬프트 위 한 줄 밴드에 현재 세션 정보를 보여 주는 모드를 만든다. 이전 <code>plan-guide</code> 모드와는 별개의 새 모드.</p>
+<h2 id="h3">표시할 정보 (최소)</h2>
+<ol><li>토큰 사용량과 남은 컨텍스트: <code>session.measure</code>의 <code>context</code> (<code>tokens</code>, <code>window</code>, <code>percent</code>) → &quot;토큰 123k / 1000k (12%), 남음 877k&quot;</li><li>작업 폴더: <code>$.session.cwd()</code></li><li>git 브랜치: <code>$.process.run([&quot;git&quot;, &quot;branch&quot;, &quot;--show-current&quot;])</code> (<code>$.session.repo()</code>에는 브랜치 필드가 없음; git 저장소가 아니면 생략)</li><li>memory.md: 작업 폴더에 <code>memory.md</code>가 있는지와 줄 수 (<code>$.fs.read</code>, 없으면 &quot;없음&quot;)</li></ol>
+<h2 id="h4">구현 계획</h2>
+<p>위치: <code>C:\Users\alsxo\.claude\dev-mods\521f9241-8095-4310-b139-7b2d5e1df8a4\session-band\</code></p>
+<ol><li><code>.claude-plugin/plugin.json</code>: name <code>session-band</code>, version <code>0.1.0</code>, <code>&quot;types&quot;: &quot;./types/index.d.ts&quot;</code></li><li><code>hooks/hooks.json</code>: <code>{ &quot;modules&quot;: [&quot;./register.tsx&quot;] }</code></li><li><code>types/index.d.ts</code>: <code>$.state</code> 값 선언 (<code>info</code>: 토큰/폴더/브랜치/메모리 문자열 묶음)</li><li><code>hooks/register.tsx</code></li><li><code>session.measure</code> 훅: <code>context</code>로 토큰·남은 컨텍스트 갱신 (<code>atom</code>/<code>update</code>)</li><li><code>session.start</code>와 <code>prompt.submit</code> 훅: 폴더·브랜치·memory.md 갱신</li><li><code>ui.render</code> (<code>component: &#x27;AbovePrompt&#x27;</code>) 훅: <code>Box</code>/<code>Text</code>로 한 줄 표시, 값이 없으면 <code>next(e)</code></li><li>모든 훅에 <code>.catch</code>를 달아 실패해도 세션에 영향 없게 함</li><li>참고 예제: <code>plugin-authoring/examples/band.tsx</code>, <code>band-state.d.ts</code> (같은 <code>atom</code>/<code>read</code>/<code>update</code> 패턴 재사용)</li></ol>
+<h2 id="h5">검증</h2>
+<ul><li><code>claude plugin validate &lt;mod 폴더&gt;</code></li><li><code>tsc -p &lt;mod 폴더&gt;</code> 타입 체크</li><li>핫 리로드 허용 후 프롬프트 위에 한 줄이 뜨는지, git 저장소가 아닌 폴더와 memory.md가 없는 폴더에서도 깨지지 않는지 확인</li><li>최소 기능이므로 테스트 파일은 이후 단계로 미룸</li></ul>
+<h2 id="h6">참고</h2>
+<ul><li>지난번 핫 리로드를 거부했으므로 로드되려면 허용하거나 세션을 다시 시작해야 함</li><li>기획 문서는 프로젝트 규칙에 따라 승인 후 <code>D:\chaai\07_auto\기획\mods-세션정보밴드.md</code>로 복사</li></ul></main></body></html>

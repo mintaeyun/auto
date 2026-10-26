@@ -1,0 +1,6 @@
+# 런타임 의존성 명세: pip install -r requirements.txt로 설치한다.
+# pypdf: 로컬 PDF 텍스트 추출. 범위는 주버전 6으로 제한한다.
+# pypdfium2: 문자열 좌표 검색/페이지 PNG 렌더링. 범위는 주버전 5로 제한한다.
+# 브라우저 제어용 playwright와 빌드용 pyinstaller는 별도로 설치하는 현재 구조다.
+pypdf>=6.0,<7
+pypdfium2>=5,<6

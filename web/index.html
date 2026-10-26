@@ -1,0 +1,251 @@
+<!doctype html>
+<!-- [기능명세] 로컬 문서 비교 UI. web_app.py가 /에서 제공하며 외부 CDN/AI는 사용하지 않는다.
+     실행 흐름: state/저장목록 로드 → 선택 → 온라인 원본 저장 → 로컬 비교 → 근거 위치 확인.
+     HTML은 화면 영역, CSS는 상태/배치, JavaScript는 API 호출과 이벤트/좌표 표시를 담당한다. -->
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>새봄 · 문서 비교</title>
+<style>
+/* [기능명세] 기본 색/글꼴, 목록/상세/버튼 배치, 상태별 색, 좁은 화면 반응형 스타일. */
+:root{font-family:'Segoe UI','맑은 고딕',sans-serif;color:#203047;background:#f3f5f8;font-size:14px}*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button{cursor:pointer;border:1px solid #d7dee8;border-radius:7px;background:#fff;color:#24344a;padding:9px 14px}button:hover{background:#edf2fa}button:disabled{opacity:.45;cursor:wait}.primary{background:#255bd8;color:white;border-color:#255bd8}.primary:hover{background:#1e4eba}header{background:#172842;color:white;padding:20px 32px;display:flex;align-items:center;justify-content:space-between}h1{font-size:23px;margin:0 0 5px}header p{margin:0;color:#c6d2e3;font-size:12px}.badge{font-size:12px;background:#293e59;padding:6px 10px;border-radius:20px}main{max-width:1560px;margin:auto;padding:24px}.summary{display:flex;gap:16px;margin-bottom:20px}.stat{flex:1;background:white;border:1px solid #e1e7ef;border-radius:10px;padding:16px 20px;color:#68778d}.stat b{display:block;font-size:27px;color:#24344a;margin-top:5px}.panel{background:white;border:1px solid #e0e6ee;border-radius:10px;margin-bottom:18px;overflow:hidden}.toolbar{padding:15px 18px;border-bottom:1px solid #e6eaf1;display:flex;gap:8px;flex-wrap:wrap;align-items:center}.toolbar strong{margin-right:auto}.toolbar input[type=search]{width:235px;padding:9px;border:1px solid #d7dee8;border-radius:7px}.muted{color:#718096;font-size:12px}.info{padding:13px 18px;background:#f8faff;line-height:1.7;border-bottom:1px solid #e6eaf1}.tablewrap{overflow:auto;max-height:375px}table{border-collapse:collapse;width:100%;text-align:left;white-space:nowrap}th{background:#f8fafc;font-weight:500;color:#69788d;position:sticky;top:0}th,td{padding:13px 14px;border-bottom:1px solid #edf0f4;font-size:13px}tbody tr{cursor:pointer}tbody tr:hover,tbody tr.active{background:#edf3ff}td.subject{white-space:normal;min-width:240px}input[type=checkbox]{accent-color:#255bd8;width:16px;height:16px}.pill{padding:4px 9px;border-radius:20px;font-size:12px;display:inline-block;background:#eef1f5;color:#66748a}.ok{background:#e7f6ee;color:#177047}.bad{background:#fff0ed;color:#b23925}.review{background:#fff5dd;color:#96620c}.empty{padding:42px;text-align:center;color:#79869a}.twocol{display:grid;grid-template-columns:1fr 1fr;gap:20px}.detail{padding:20px;line-height:1.8}.detail h2{font-size:17px;margin:0 0 10px}.body{white-space:pre-wrap;background:#f8fafc;padding:14px;border-radius:8px;margin-top:12px;font-size:13px}.checks{list-style:none;margin:0;padding:0}.checks li{padding:12px 0;border-bottom:1px solid #eef1f5}.checks p{margin:6px 0 0;color:#66758a;font-size:13px}.progress{margin:0 0 16px;padding:12px 16px;background:#e9f0ff;color:#244e99;border-radius:8px;white-space:pre-wrap}.progress.error{background:#fff0ed;color:#a62e23}.upload{display:flex;gap:15px;align-items:end;flex-wrap:wrap;padding:18px}.upload label{display:grid;gap:8px;flex:1;min-width:220px}.preview{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px}.preview iframe{width:100%;height:580px;border:1px solid #e1e7ef;border-radius:6px}.preview h3{font-size:14px;margin:0 0 10px}a{color:#245acb}.footer{display:flex;justify-content:space-between;align-items:center;color:#7b889a;font-size:12px;padding:8px 0 16px;gap:12px}.hidden{display:none!important}@media(max-width:950px){.twocol,.preview{grid-template-columns:1fr}.summary{gap:8px}.stat{padding:12px}main{padding:12px}header{padding:18px}.toolbar input[type=search]{width:100%}}
+
+/* [기능명세] PDF 렌더 이미지와 비율 좌표 사각형을 겹치며 클릭을 가리지 않도록 pointer-events:none을 사용한다. */
+.locator{display:grid;grid-template-columns:1fr 1fr;gap:14px}.locator h3{margin:0 0 6px}.pageBox{position:relative;border:1px solid #d7dee8;background:#fff;overflow:auto;max-height:70vh}.pageBox img{display:block;width:100%}.pageBox .hl{position:absolute;border:2px solid;border-radius:3px;pointer-events:none}.hl.ok{background:rgba(6,118,71,.25);border-color:#067647}.hl.bad{background:rgba(180,35,24,.25);border-color:#b42318}.hl.warn{background:rgba(152,91,0,.25);border-color:#985b00}.pager{display:flex;gap:8px;align-items:center;margin:6px 0}.checks li.pick{cursor:pointer}.checks li.pick:hover,.checks li.on{background:#eef3fd}.empty{padding:24px;color:#6b7a90}
+</style></head><body>
+<header><div><h1>새봄 문서 비교</h1><p>세금계산서와 계약서의 근거를 한 화면에서</p></div><span class="badge">로컬 실행 · AI 미사용</span></header>
+<main>
+<div class="summary"><div class="stat">메일 목록<b id="count">0</b></div><div class="stat">일치<b id="ok">0</b></div><div class="stat">불일치<b id="bad">0</b></div><div class="stat">확인 필요<b id="review">0</b></div></div>
+<div id="notice" class="progress" role="status" aria-live="polite">저장된 목록을 불러오는 중…</div>
+<section class="panel"><div class="toolbar"><strong>받은 메일함</strong><label><input id="expanded" type="checkbox" checked> 확장 케이스</label><button id="sync">최신 목록 가져오기</button><button id="reload">저장 목록 열기</button></div>
+<div class="info"><b>① 목록 가져오기 → ② 메일 선택 → ③ 자료 저장 → ④ 로컬 비교</b><br><span id="syncInfo" class="muted">아직 저장된 목록이 없습니다.</span></div>
+<div class="toolbar"><input id="search" type="search" placeholder="메일 제목·보낸 사람 검색" aria-label="메일 검색"><span id="selection" class="muted">0건 선택</span><button id="prepare">선택 자료 저장</button><button id="compare" class="primary">선택 메일 로컬 비교</button></div>
+<div class="tablewrap"><table><thead><tr><th><input id="selectAll" type="checkbox" aria-label="표시된 메일 전체 선택"></th><th>받은 시각</th><th>보낸 사람</th><th>제목</th><th>세금계산서 저장 상태</th><th>계약서 저장 상태</th><th>비교 결과</th></tr></thead><tbody id="rows"></tbody></table><div id="empty" class="empty hidden">저장된 메일이 없습니다. 인터넷 연결 시 최신 목록을 가져오거나 아래에서 로컬 PDF를 선택하세요.</div></div></section>
+<div class="twocol"><section class="panel"><div class="toolbar"><strong>메일 내용</strong></div><div class="detail" id="mailDetail">목록에서 메일을 클릭하세요.</div></section><section class="panel"><div class="toolbar"><strong>비교 근거</strong><a id="reportLink" class="hidden" download>CSV 보고서 저장</a></div><div class="detail" id="resultDetail">선택한 PDF를 로컬에서 비교하면 항목별 결과가 표시됩니다.</div></section></div>
+<section class="panel"><div class="toolbar"><strong>로컬 PDF 직접 비교</strong><span class="muted">사이트 목록 없이도 사용 · 파일당 최대 25MB</span></div><div class="upload"><label>세금계산서 PDF<input id="invoiceFile" type="file" accept="application/pdf,.pdf"></label><label>계약서 PDF<input id="contractFile" type="file" accept="application/pdf,.pdf"></label><button id="localCompare">선택한 PDF 비교</button></div></section>
+<section class="panel hidden" id="locatePanel"><div class="toolbar"><strong>비교값 위치 확인</strong><span class="muted" id="locHint">위 비교 항목을 클릭하면 두 PDF에서 해당 값의 위치를 표시합니다.</span></div><div class="locator"><div><h3>세금계산서</h3><div class="pager"><button data-pg="invoice" data-d="-1">이전</button><span id="invoicePage"></span><button data-pg="invoice" data-d="1">다음</button></div><div class="pageBox" id="invoiceBox"></div></div><div><h3>계약서</h3><div class="pager"><button data-pg="contract" data-d="-1">이전</button><span id="contractPage"></span><button data-pg="contract" data-d="1">다음</button></div><div class="pageBox" id="contractBox"></div></div></div></section>
+<section class="panel hidden" id="previewPanel"><div class="toolbar"><strong>원본 PDF 확인</strong><button id="closePreview">접기</button></div><div class="preview"><div><h3>세금계산서 <a id="invoiceLink" target="_blank" rel="noopener">새 탭</a></h3><iframe id="invoiceViewer" title="세금계산서 원본"></iframe></div><div><h3>계약서 <a id="contractLink" target="_blank" rel="noopener">새 탭</a></h3><iframe id="contractViewer" title="계약서 원본"></iframe></div></div></section>
+<div class="footer"><span id="dataDir"></span><button id="shutdown">프로그램 종료</button></div>
+</main>
+<script>
+/** [기능명세] DOM 조회 및 화면 전역 상태 초기화
+ * 역할: id→document.getElementById. token은 POST 인증, catalog/results는 목록/결과, selected는 체크 집합, active는 상세 ID, busy는 작업 잠금, dataDir는 서버 저장 루트다.
+ * 입력: id: 요소 ID 문자열.
+ * 반환: Element 또는 null.
+ * 예외/부작용: 상태 변수는 이 스크립트의 다른 함수와 공유한다. 없는 요소의 후속 접근은 오류가 될 수 있다.
+ */
+const $=id=>document.getElementById(id);let token='',catalog={mails:[],contracts:[]},results={},selected=new Set(),active=null,busy=false,dataDir='';
+/** [기능명세] esc
+ * 역할: 서버/메일 문자열을 HTML 텍스트에 넣기 전에 특수문자를 이스케이프한다. replace 콜백은 문자별 엔티티를 반환한다.
+ * 입력: s: 문자열로 변환 가능한 값. null/undefined는 빈 문자열.
+ * 반환: 이스케이프된 문자열.
+ * 예외/부작용: 원본을 변경하지 않는다. 임의 HTML을 그대로 삽입하지 않도록 렌더링 함수에서 사용한다.
+ */
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/** [기능명세] pill
+ * 역할: 비교 상태별 배지 HTML을 만든다.
+ * 입력: s: 일치/불일치/확인 필요 또는 빈 값.
+ * 반환: 이스케이프된 상태 텍스트를 포함한 span HTML.
+ * 예외/부작용: DOM 변경은 하지 않는다. 빈 값은 미실행이다.
+ */
+const pill=s=>`<span class="pill ${s==='일치'?'ok':s==='불일치'?'bad':s==='확인 필요'?'review':''}">${esc(s||'미실행')}</span>`;
+/** [기능명세] notice
+ * 역할: 진행/오류 알림 문구와 스타일을 갱신한다.
+ * 입력: s: 표시 문자열. error=false: 오류 스타일 여부.
+ * 반환: undefined.
+ * 예외/부작용: notice 요소의 textContent와 error 클래스를 바꾼다.
+ */
+function notice(s,error=false){$('notice').textContent=s;$('notice').classList.toggle('error',error)}
+/** [기능명세] setBusy
+ * 역할: 작업 중 버튼 중복 요청을 막는다.
+ * 입력: value: busy 여부 boolean.
+ * 반환: undefined.
+ * 예외/부작용: 전역 busy와 동기화/읽기/저장/비교/종료 버튼 disabled를 변경한다. 목록 클릭 자체는 막지 않는다.
+ */
+function setBusy(value){busy=value;for(const id of ['sync','reload','prepare','compare','localCompare','expanded','shutdown'])$(id).disabled=value}
+/** [기능명세] request
+ * 역할: 동일 출처 로컬 API를 GET 또는 JSON POST로 호출한다.
+ * 입력: url: 로컬 경로. payload가 undefined이면 GET, 있으면 POST.
+ * 반환: Promise: 파싱한 JSON 응답.
+ * 예외/부작용: fetch를 수행하며 POST에 token을 붙인다. HTTP 실패는 error 문구로 Error, 통신/JSON 오류는 reject한다. 외부 사이트 조회는 서버가 담당한다.
+ */
+async function request(url,payload){const res=await fetch(url,payload===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-App-Token':token},body:JSON.stringify(payload)});const data=await res.json();if(!res.ok)throw Error(data.error||'요청 실패');return data}
+/** [기능명세] expanded
+ * 역할: 확장 케이스 체크 상태를 읽는다.
+ * 입력: 없음. expanded 체크박스 참조.
+ * 반환: boolean.
+ * 예외/부작용: 읽기만 수행한다.
+ */
+function expanded(){return $('expanded').checked}
+/** [기능명세] load
+ * 역할: 저장 목록과 누적 결과를 로드하고 목록/상세 화면을 초기화한다.
+ * 입력: 없음. expanded()를 참조한다.
+ * 반환: Promise<void>.
+ * 예외/부작용: 로컬 GET 두 번 후 catalog/results를 교체하고 선택/미리보기를 초기화한다. 마지막 조회 시각은 표시만 하며 최신 사이트를 조회하지 않는다. API 오류는 호출자에게 전달한다.
+ */
+async function load(){catalog=await request('/api/catalog?expanded='+(expanded()?1:0));results=await request('/api/history');selected.clear();active=null;$('previewPanel').classList.add('hidden');$('locatePanel').classList.add('hidden');$('mailDetail').textContent='목록에서 메일을 클릭하세요.';$('resultDetail').textContent='저장된 비교 결과가 있으면 메일 선택 시 표시됩니다.';render();$('syncInfo').textContent=catalog._synced_at?`마지막 목록 조회: ${catalog._synced_at.replace('T',' ')} · 로컬 저장 목록 · 지출 계약 PDF ${catalog._contracts_saved||0}개 저장. 최신 자료는 목록과 PDF를 다시 저장하세요.`:'저장된 목록 없음 · 최신 목록과 PDF 다운로드에만 인터넷이 필요합니다.'}
+/** [기능명세] visible
+ * 역할: 검색어에 맞는 메일만 반환한다.
+ * 입력: search 입력값 및 catalog.mails.
+ * 반환: 메일 dict 배열.
+ * 예외/부작용: 제목+보낸 사람을 소문자로 바꿔 포함 검색한다. filter 콜백은 화면/원본 목록을 변경하지 않는다.
+ */
+function visible(){const q=$('search').value.trim().toLowerCase();return catalog.mails.filter(m=>(m.subject+' '+m.from_name).toLowerCase().includes(q))}
+/** [기능명세] render
+ * 역할: 검색된 목록과 요약/선택 상태를 HTML로 갱신한다.
+ * 입력: catalog/results/selected/active 및 검색어.
+ * 반환: undefined.
+ * 예외/부작용: map으로 행을 구성하고 저장 상태 두 열, 비교 배지, 건수와 전체선택 상태를 바꾼다. 모든 메일 문자열은 esc를 거친다. selected 집합 자체는 바꾸지 않는다.
+ */
+function render(){const mails=visible();$('rows').innerHTML=mails.map(m=>`<tr data-id="${esc(m.id)}" class="${active===m.id?'active':''}"><td><input type="checkbox" data-check="${esc(m.id)}" ${selected.has(m.id)?'checked':''} aria-label="${esc(m.subject)} 선택"></td><td>${esc(m.received_at)}</td><td>${esc(m.from_name)}</td><td class="subject">${esc(m.subject)}</td><td>${esc(m._invoice_storage?.status||'확인 중')}</td><td title="${esc(m._contract_storage?.detail||'')}">${esc(m._contract_storage?.status||'확인 중')}<br><small class="muted">${esc(m._contract_storage?.id||'')} ${esc(m._contract_storage?.basis||'')}</small></td><td>${pill(results[m.id]?.status)}</td></tr>`).join('');$('empty').classList.toggle('hidden',mails.length>0);$('count').textContent=catalog.mails.length;for(const [id,state] of [['ok','일치'],['bad','불일치'],['review','확인 필요']])$(id).textContent=catalog.mails.filter(m=>results[m.id]?.status===state).length;$('selection').textContent=selected.size+'건 선택';$('selectAll').checked=mails.length>0&&mails.every(m=>selected.has(m.id));$('selectAll').indeterminate=mails.some(m=>selected.has(m.id))&&!$('selectAll').checked}
+/** [기능명세] fileUrl
+ * 역할: PDF/보고서 원본 경로를 허용 파일 제공 API URL로 바꾼다.
+ * 입력: path: 서버에서 받은 파일 경로. dataDir 참조.
+ * 반환: 인코딩된 /files?path=... 또는 빈 문자열.
+ * 예외/부작용: 구분자를 정규화하고 dataDir 하위이면 상대 경로를 사용한다. 접근 권한은 서버에서 다시 검사한다.
+ */
+function fileUrl(path){if(!path)return '';const clean=s=>s.replaceAll('\\','/');const relative=clean(path).startsWith(clean(dataDir)+'/')?clean(path).slice(clean(dataDir).length+1):path;return '/files?path='+encodeURIComponent(relative)}
+/** [기능명세] showResult
+ * 역할: 비교 항목과 두 원본 iframe/링크를 표시하는 기본 렌더러.
+ * 입력: r: status/checks/원본 경로/계약번호/비교시각을 가진 결과.
+ * 반환: undefined.
+ * 예외/부작용: resultDetail, iframe src, 원본 링크와 previewPanel을 변경한다. 아래 확장 래퍼가 위치 선택 동작을 추가한다.
+ */
+function showResult(r){$('resultDetail').innerHTML=`<h2>${pill(r.status)} <small>${esc(r.contract_id)}</small></h2><div class="muted">${esc(r.compared_at||'')} · 저장된 원본 기준</div><ul class="checks">${r.checks.map(c=>`<li>${pill(c.status)} <b>${esc(c.item)}</b><p>${esc(c.detail)}</p></li>`).join('')}</ul>`;let any=false;for(const [key,prefix]of [['invoice_path','invoice'],['contract_path','contract']]){const url=fileUrl(r[key]);$(prefix+'Viewer').src=url||'about:blank';$(prefix+'Link').href=url||'#';$(prefix+'Link').classList.toggle('hidden',!url);any=any||!!url}$('previewPanel').classList.toggle('hidden',!any)}
+/** [기능명세] showMail
+ * 역할: 클릭한 메일 본문과 저장 결과를 표시한다.
+ * 입력: id: catalog의 메일 ID.
+ * 반환: undefined. ID가 없으면 즉시 반환.
+ * 예외/부작용: active/상세 DOM/미리보기와 목록 강조를 변경한다. 결과가 있으면 showResult를 호출하며 파일 다운로드나 새 비교는 하지 않는다.
+ */
+function showMail(id){active=id;const m=catalog.mails.find(m=>m.id===id);if(!m)return;$('mailDetail').innerHTML=`<h2>${esc(m.subject)}</h2><div class="muted">${esc(m.from_name)} &lt;${esc(m.from_email)}&gt;<br>받는 사람: ${esc(m.to)}<br>${esc(m.received_at)}</div><div class="body">${esc(m.body)}</div><p class="muted">첨부: ${m.attachments.map(a=>esc(a.name)).join(', ')||'없음'}</p>`;if(results[id])showResult(results[id]);else{$('resultDetail').textContent='아직 비교하지 않았습니다. 메일을 선택하고 자료 저장 후 로컬 비교를 실행하세요.';$('previewPanel').classList.add('hidden');$('locatePanel').classList.add('hidden')}render()}
+/** [기능명세] job
+ * 역할: 긴 작업을 요청하고 완료까지 진행 상태를 조회한다.
+ * 입력: endpoint: sync/prepare/compare/local-compare API. payload: 요청 객체.
+ * 반환: Promise<void>.
+ * 예외/부작용: busy 중이면 반환한다. job_id를 받고 350ms 간격으로 조회하며 완료 후 목록/이력을 재로드한다. 선택 ID를 복원하고 결과/CSV 링크/저장 오류를 표시한다. 예외는 notice, finally는 버튼 잠금 해제다.
+ */
+async function job(endpoint,payload){if(busy)return;setBusy(true);notice('작업을 시작합니다…');try{const {job_id}=await request(endpoint,payload);let j;do{await new Promise(r=>setTimeout(r,350));j=await request('/api/jobs/'+job_id);notice(j.message||'처리 중…')}while(j.state==='running');if(j.state==='error')throw Error(j.message);const previous=active, previousSelection=[...selected];await load();selected=new Set(previousSelection.filter(id=>catalog.mails.some(m=>m.id===id)));if(j.result?.results){for(const r of j.result.results)results[r.mail_id]=r;active=j.result.results[0]?.mail_id;if(catalog.mails.some(m=>m.id===active))showMail(active);else if(j.result.results[0])showResult(j.result.results[0]);$('reportLink').href='/files?path='+encodeURIComponent(j.result.report);$('reportLink').classList.remove('hidden');notice(`${j.result.results.length}건 로컬 비교 완료. 결과는 이 컴퓨터에 저장했습니다.`)}else if(endpoint==='/api/prepare'){notice(`PDF ${j.result.saved}개 저장 완료.`+(j.result.errors.length?'\n실패한 파일:\n'+j.result.errors.join('\n'): ' 인터넷 없이 로컬 비교할 수 있습니다.'),j.result.errors.length>0);if(previous)showMail(previous)}else{notice('최신 목록을 저장했습니다. 비교할 메일을 선택하세요.')}render()}catch(e){notice(e.message,true)}finally{setBusy(false)}}
+/** [기능명세] 목록 행 클릭 콜백
+ * 역할: 체크박스는 selected 집합만 토글하고 render한다. 그 외 행 클릭은 showMail로 상세를 표시한다. event.target과 data 속성을 읽는다.
+ * 입력: 현재 DOM 이벤트/클로저 상태. 세부 입력은 설명 참조.
+ * 반환: 명시 반환 없음(비동기 콜백은 Promise).
+ * 예외/부작용: 위 설명의 상태/UI/API 변경이 발생한다.
+ */
+$('rows').addEventListener('click',e=>{if(e.target.matches('[data-check]')){const id=e.target.dataset.check;e.target.checked?selected.add(id):selected.delete(id);render();return}const tr=e.target.closest('[data-id]');if(tr)showMail(tr.dataset.id)});
+/** [기능명세] 전체선택/검색 이벤트
+ * 역할: 전체선택은 현재 visible() 행에만 적용한다. 검색 입력은 render만 호출하며 선택한 다른 ID는 유지한다.
+ * 입력: 현재 DOM 이벤트/클로저 상태. 세부 입력은 설명 참조.
+ * 반환: 명시 반환 없음(비동기 콜백은 Promise).
+ * 예외/부작용: 위 설명의 상태/UI/API 변경이 발생한다.
+ */
+$('selectAll').onchange=()=>{for(const m of visible())$('selectAll').checked?selected.add(m.id):selected.delete(m.id);render()};$('search').oninput=render;
+/** [기능명세] 목록 동기화/저장 목록/확장 모드 이벤트
+ * 역할: sync는 외부 목록 갱신 작업을 요청한다. reload와 expanded 변경은 저장 캐시만 읽는다. 실패는 notice로 표시한다.
+ * 입력: 현재 DOM 이벤트/클로저 상태. 세부 입력은 설명 참조.
+ * 반환: 명시 반환 없음(비동기 콜백은 Promise).
+ * 예외/부작용: 위 설명의 상태/UI/API 변경이 발생한다.
+ */
+$('sync').onclick=()=>job('/api/sync',{expanded:expanded()});$('reload').onclick=()=>load().then(()=>notice('저장된 목록을 열었습니다. 네트워크를 사용하지 않았습니다.')).catch(e=>notice(e.message,true));$('expanded').onchange=$('reload').onclick;
+/** [기능명세] selectionPayload
+ * 역할: 선택된 메일 ID와 확장 모드의 요청 본문을 만든다.
+ * 입력: selected 집합과 expanded 체크 상태.
+ * 반환: {ids: 문자열 배열, expanded: boolean}.
+ * 예외/부작용: 빈 선택이면 Error. 파일/네트워크/선택 상태 변경은 없다.
+ */
+function selectionPayload(){if(!selected.size)throw Error('비교할 메일을 체크해 주세요.');return{ids:[...selected],expanded:expanded()}}
+/** [기능명세] 선택 자료 저장/선택 로컬 비교 콜백
+ * 역할: 버튼별 endpoint를 클로저로 캡처한다. selectionPayload로 선택을 검증하고 job을 호출한다. 빈 선택은 알림으로 처리한다.
+ * 입력: 현재 DOM 이벤트/클로저 상태. 세부 입력은 설명 참조.
+ * 반환: 명시 반환 없음(비동기 콜백은 Promise).
+ * 예외/부작용: 위 설명의 상태/UI/API 변경이 발생한다.
+ */
+for(const [id,endpoint]of [['prepare','/api/prepare'],['compare','/api/compare']])$(id).onclick=()=>{try{job(endpoint,selectionPayload())}catch(e){notice(e.message,true)}};
+/** [기능명세] readFile
+ * 역할: 직접 선택한 PDF를 로컬 서버에 전달할 Base64로 읽는다.
+ * 입력: file: 브라우저 File 객체.
+ * 반환: Promise<{name, content}>. content에는 data URL 접두사를 제외한다.
+ * 예외/부작용: FileReader로 사용자 파일을 메모리에 읽는다. onload는 resolve, onerror는 reject한다. 이 함수 자체는 서버로 전송하지 않는다.
+ */
+function readFile(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve({name:file.name,content:r.result.split(',')[1]});r.onerror=()=>reject(Error('파일을 읽을 수 없습니다.'));r.readAsDataURL(file)})}
+/** [기능명세] 직접 PDF 비교 이벤트
+ * 역할: 각 File 입력이 있는지와 25MiB 제한을 확인한다. readFile 두 번 후 로컬 서버 업로드/비교를 요청한다. 실패는 notice로 표시한다.
+ * 입력: 현재 DOM 이벤트/클로저 상태. 세부 입력은 설명 참조.
+ * 반환: 명시 반환 없음(비동기 콜백은 Promise).
+ * 예외/부작용: 위 설명의 상태/UI/API 변경이 발생한다.
+ */
+$('localCompare').onclick=async()=>{try{const i=$('invoiceFile').files[0],c=$('contractFile').files[0];if(!i||!c)throw Error('세금계산서와 계약서 PDF를 각각 선택하세요.');if(i.size>25*1024*1024||c.size>25*1024*1024)throw Error('파일당 25MB 이하로 선택하세요.');await job('/api/local-compare',{invoice:await readFile(i),contract:await readFile(c)})}catch(e){notice(e.message,true)}};
+/** [기능명세] 원본 접기/프로그램 종료 이벤트
+ * 역할: 접기 버튼은 패널을 숨긴다. 동일 줄의 locatePanel 숨김은 등록 시 실행되는 기존 코드다. 종료 버튼은 shutdown POST 후 버튼을 비활성화하고 종료 안내를 표시한다.
+ * 입력: 현재 DOM 이벤트/클로저 상태. 세부 입력은 설명 참조.
+ * 반환: 명시 반환 없음(비동기 콜백은 Promise).
+ * 예외/부작용: 위 설명의 상태/UI/API 변경이 발생한다.
+ */
+$('closePreview').onclick=()=>$('previewPanel').classList.add('hidden');$('locatePanel').classList.add('hidden');$('shutdown').onclick=async()=>{try{await request('/api/shutdown',{});setBusy(true);notice('프로그램을 종료했습니다. 이 브라우저 탭을 닫아 주세요.')}catch(e){notice(e.message,true)}};
+/** [기능명세] 화면 최초 초기화 비동기 함수
+ * 역할: state API에서 token/dataDir를 읽고 저장 목록을 연다. 오류는 알림으로 표시한다. 외부 사이트를 자동 조회하지 않는다.
+ * 입력: 현재 DOM 이벤트/클로저 상태. 세부 입력은 설명 참조.
+ * 반환: 명시 반환 없음(비동기 콜백은 Promise).
+ * 예외/부작용: 위 설명의 상태/UI/API 변경이 발생한다.
+ */
+(async()=>{try{const state=await request('/api/state');token=state.token;dataDir=state.data_dir;$('dataDir').textContent='자료 저장 위치: '+dataDir;await load();notice('오프라인 사용 준비 완료. 목록·PDF를 저장해 두면 AI와 인터넷 없이 비교합니다.')}catch(e){notice(e.message,true)}})();
+
+/** [기능명세] loc 상태
+ * 역할: 계산서/계약서별 현재 경로, 페이지, 총쪽수, 검색 박스, 색상 클래스를 보관한다.
+ * 입력: 서버에서 받은 결과와 페이지 조회 응답.
+ * 반환: 양쪽 패널에서 공유하는 상태 객체.
+ * 예외/부작용: setLoc/drawLoc/pager 콜백에서 사용한다.
+ */
+const loc={invoice:{path:'',page:1,pages:1,boxes:[],cls:''},contract:{path:'',page:1,pages:1,boxes:[],cls:''}};
+/** [기능명세] relPath
+ * 역할: 좌표 미리보기용 경로를 정규화한다.
+ * 입력: path: 서버 PDF 경로. dataDir 참조.
+ * 반환: dataDir 하위 상대 경로 또는 원래 경로.
+ * 예외/부작용: 내부 clean 콜백은 역슬래시를 슬래시로 치환한다. 파일을 읽거나 쓰지 않는다.
+ */
+function relPath(path){const clean=x=>x.replaceAll('\\','/');return clean(path).startsWith(clean(dataDir)+'/')?clean(path).slice(clean(dataDir).length+1):path}
+/** [기능명세] drawLoc
+ * 역할: 지정 PDF의 현재 페이지 이미지와 근거 사각형을 그린다.
+ * 입력: kind: invoice 또는 contract. loc[kind] 상태.
+ * 반환: undefined.
+ * 예외/부작용: pageBox와 페이지 문구를 변경한다. /api/page 이미지 요청이 발생한다. 좌표 비율에 100을 곱해 CSS 위치/크기로 사용한다. 경로가 없으면 안내만 표시한다.
+ */
+function drawLoc(kind){const s=loc[kind],box=$(kind+'Box');if(!s.path){box.innerHTML='<div class="empty">PDF가 없어 표시할 수 없습니다.</div>';$(kind+'Page').textContent='';return}
+$(kind+'Page').textContent=s.page+' / '+s.pages+'쪽 · 이 쪽 표시 '+s.boxes.filter(b=>b.page===s.page).length+'곳';
+box.innerHTML='<img alt="'+kind+'" src="/api/page?path='+encodeURIComponent(relPath(s.path))+'&page='+s.page+'">'+s.boxes.filter(b=>b.page===s.page).map(b=>'<div class="hl '+s.cls+'" title="'+esc(b.value)+'" style="left:'+b.box[0]*100+'%;top:'+b.box[1]*100+'%;width:'+(b.box[2]-b.box[0])*100+'%;height:'+(b.box[3]-b.box[1])*100+'%"></div>').join('')}
+/** [기능명세] setLoc
+ * 역할: PDF 경로/근거 좌표를 저장하고 초기 표시 페이지를 정한다.
+ * 입력: kind: invoice/contract, path: PDF 경로, boxes: 근거 배열, cls: ok/bad/warn.
+ * 반환: Promise<void>.
+ * 예외/부작용: loc 상태를 바꾸고 첫 근거 페이지 또는 1쪽을 선택한다. 페이지 수 조회 실패는 무시하고 기본 1을 사용한다. 마지막에 drawLoc를 호출한다.
+ */
+async function setLoc(kind,path,boxes,cls){const s=loc[kind];s.path=path;s.boxes=boxes;s.cls=cls;s.page=boxes.length?boxes[0].page:1;s.pages=1;if(path){try{s.pages=(await request('/api/page?path='+encodeURIComponent(relPath(path))+'&page=1&info=1')).pages}catch(e){}}drawLoc(kind)}
+/** [기능명세] pickCheck
+ * 역할: 사용자가 선택한 비교 항목의 원본 근거를 두 패널에 표시한다.
+ * 입력: r: 비교 결과. i: checks 배열 인덱스.
+ * 반환: undefined. 내부 setLoc는 비동기로 두 번 실행된다.
+ * 예외/부작용: 선택 항목 강조/안내 문구/양쪽 좌표 상태를 변경한다. where가 없으면 빈 좌표로 원본만 보여준다. 입력 인덱스는 UI가 제공하는 유효 인덱스를 가정한다.
+ */
+function pickCheck(r,i){const c=r.checks[i],cls=c.status==='일치'?'ok':c.status==='불일치'?'bad':'warn';document.querySelectorAll('#resultDetail .checks li').forEach((li,n)=>li.classList.toggle('on',n===i));const w=c.where;
+$('locHint').textContent=w?(w.invoice.length+w.contract.length?c.item+': 표시된 위치에서 비교한 값을 확인하세요.':c.item+': PDF에서 값 위치를 찾지 못했습니다(스캔 PDF 등).'):c.item+': 이 항목은 위치 표시를 지원하지 않습니다.';
+setLoc('invoice',r.invoice_path,w?w.invoice:[],cls);setLoc('contract',r.contract_path,w?w.contract:[],cls)}
+/** [기능명세] 기본 결과 렌더러 보관
+ * 역할: showResult를 확장하기 전에 원래 함수를 저장해 재귀 호출을 피한다.
+ * 입력: 최초 showResult 함수 참조.
+ * 반환: baseShowResult 함수 참조.
+ * 예외/부작용: 아래 할당은 위치 표시 기능만 위임하는 기존 래퍼 구조다.
+ */
+const baseShowResult=showResult;
+/** [기능명세] showResult 위치 표시 확장 래퍼
+ * 역할: 기존 baseShowResult로 내용을 표시한 뒤 각 항목 클릭에 pickCheck를 연결한다. 원본이 있으면 좌표 패널을 열고 첫 where 항목을 선택한다.
+ * 입력: 현재 DOM 이벤트/클로저 상태. 세부 입력은 설명 참조.
+ * 반환: 명시 반환 없음(비동기 콜백은 Promise).
+ * 예외/부작용: 위 설명의 상태/UI/API 변경이 발생한다.
+ */
+showResult=function(r){baseShowResult(r);const lis=document.querySelectorAll('#resultDetail .checks li');lis.forEach((li,i)=>{li.classList.add('pick');li.onclick=()=>pickCheck(r,i)});
+$('locatePanel').classList.toggle('hidden',!(r.invoice_path||r.contract_path));const first=r.checks.findIndex(c=>c.where);if(r.invoice_path||r.contract_path)pickCheck(r,first>=0?first:0)};
+/** [기능명세] PDF 이전/다음 페이지 콜백
+ * 역할: 클릭 버튼의 kind와 증감값을 읽어 페이지 번호를 1~전체쪽수로 제한하고 drawLoc를 호출한다.
+ * 입력: 현재 DOM 이벤트/클로저 상태. 세부 입력은 설명 참조.
+ * 반환: 명시 반환 없음(비동기 콜백은 Promise).
+ * 예외/부작용: 위 설명의 상태/UI/API 변경이 발생한다.
+ */
+document.querySelectorAll('[data-pg]').forEach(b=>b.onclick=()=>{const s=loc[b.dataset.pg];s.page=Math.min(s.pages,Math.max(1,s.page+Number(b.dataset.d)));drawLoc(b.dataset.pg)});
+</script></body></html>
